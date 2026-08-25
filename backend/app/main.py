@@ -211,3 +211,8 @@ def root() -> Dict[str, Any]:
     }
 
 
+# Export ASGI handler alias for Vercel Serverless Function compatibility
+handler = app
+
+
+

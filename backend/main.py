@@ -5,4 +5,6 @@ Exports the initialized FastAPI app from app.main.
 
 from app.main import app
 
-__all__ = ["app"]
+handler = app
+__all__ = ["app", "handler"]
+
