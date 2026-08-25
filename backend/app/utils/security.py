@@ -8,36 +8,45 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import jwt
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from app.config.settings import get_settings
 from app.exceptions.custom_exceptions import UnauthorizedException
 
 settings = get_settings()
 
-pwd_context = CryptContext(
-    schemes=["argon2", "bcrypt"],
-    deprecated="auto",
-    argon2__memory_cost=65536,
-    argon2__time_cost=3,
-    argon2__parallelism=4,
+# Modern, thread-safe, direct Argon2id PasswordHasher (zero reliance on deprecated passlib/crypt)
+pwd_hasher = PasswordHasher(
+    time_cost=3,
+    memory_cost=65536,
+    parallelism=4,
+    hash_len=32,
+    salt_len=16,
 )
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against a stored cryptographic hash.
+    """Verify a plaintext password against a stored Argon2 cryptographic hash.
 
     Args:
         plain_password: Cleartext password string.
-        hashed_password: Stored Argon2/Bcrypt hash.
+        hashed_password: Stored Argon2 hash.
 
     Returns:
         bool: True if password matches hash, False otherwise.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    if not hashed_password or not plain_password:
+        return False
+    try:
+        return pwd_hasher.verify(hashed_password, plain_password)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    """Generate a secure Argon2 hash for the given plaintext password.
+    """Generate a secure Argon2id hash for the given plaintext password.
 
     Args:
         password: Plaintext password.
@@ -45,7 +54,7 @@ def get_password_hash(password: str) -> str:
     Returns:
         str: Argon2 hashed password string.
     """
-    return pwd_context.hash(password)
+    return pwd_hasher.hash(password)
 
 
 def create_access_token(
