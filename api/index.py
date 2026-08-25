@@ -15,8 +15,12 @@ BACKEND_DIR = BASE_DIR / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-# Import initialized FastAPI application
-from app.main import app
+# Import initialized FastAPI application (backend resolved dynamically in sys.path)
+try:
+    from app.main import app  # type: ignore[import-not-found, import-untyped]  # pyright: ignore[reportMissingImports]
+except ImportError:
+    from backend.app.main import app  # type: ignore[import-not-found, import-untyped]  # pyright: ignore[reportMissingImports]
 
 # Export app as handler
 handler = app
+
