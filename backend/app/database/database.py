@@ -13,17 +13,30 @@ from app.config.logging import logger
 
 settings = get_settings()
 
-db_url = settings.DATABASE_URL
-IS_VERCEL = os.getenv("VERCEL") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
+def is_serverless_env() -> bool:
+    """Detect whether code is running inside a serverless runtime (Vercel, AWS Lambda)."""
+    return bool(
+        os.getenv("VERCEL") == "1"
+        or os.getenv("VERCEL_ENV")
+        or os.getenv("VERCEL_REGION")
+        or os.getenv("VERCEL_URL")
+        or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+        or os.getenv("LAMBDA_TASK_ROOT")
+        or os.path.exists("/var/task")
+    )
 
-# On Vercel Serverless, if DATABASE_URL is localhost, fallback gracefully to /tmp SQLite
-if IS_VERCEL and ("localhost" in db_url or "127.0.0.1" in db_url):
-    db_url = "sqlite:////tmp/customer_success.db"
-    logger.info(f"Vercel Serverless environment detected with local DB. Fallback to {db_url}")
+
+IS_SERVERLESS = is_serverless_env()
+db_url = settings.DATABASE_URL or ""
 
 # Normalize postgres URL for SQLAlchemy 2.0
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+# In serverless environments, fallback to in-memory SQLite if no remote database is configured
+if IS_SERVERLESS and ("localhost" in db_url or "127.0.0.1" in db_url or not db_url):
+    db_url = "sqlite:///:memory:"
+    logger.info("Serverless environment detected with local/empty DB URL. Using in-memory SQLite.")
 
 connect_args = {}
 if db_url.startswith("sqlite"):
@@ -41,9 +54,9 @@ else:
         db_url,
         echo=settings.DEBUG,
         connect_args=connect_args,
-        poolclass=NullPool if IS_VERCEL else None,
+        poolclass=NullPool if IS_SERVERLESS else None,
         pool_pre_ping=True,
-        **({} if IS_VERCEL else {"pool_size": 10, "max_overflow": 20}),
+        **({} if IS_SERVERLESS else {"pool_size": 10, "max_overflow": 20}),
     )
 
 SessionLocal = sessionmaker(
